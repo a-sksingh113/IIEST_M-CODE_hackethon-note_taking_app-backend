@@ -1,4 +1,6 @@
 const User = require("../models/userModel");
+const JWT = require("jsonwebtoken");
+const {sendForgetPasswordURL,sendWellcomeEmail} = require('../middleware/emailSendMiddleware')
 const handleUserSignin = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -49,5 +51,76 @@ const handleUserlogout = (req, res) => {
   res.status(200).json({ message: "Logged out successfully" });
 };
 
+const handleUpdateUser = async (req, res) => {
+  const { userId } = req.params;
+  const { fullName, year } = req.body;
 
-module.exports = { handleUserSignup, handleUserSignin,handleUserlogout};
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Update fullName and year
+    user.fullName = fullName || user.fullName;
+    user.year = year || user.year;
+
+    // Update profile photo if provided
+    if (req.file) {
+      user.profileImageURL = req.file.path;
+    }
+
+    await user.save();
+    return res.status(200).json({ message: "User updated successfully", user });
+  } catch (error) {
+    console.error("Error updating user: ", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+const handleForgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Generate Reset Token
+    const resetToken = JWT.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    // Send Reset Email
+    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+    await sendForgetPasswordURL(user.email,resetURL)
+
+    return res.status(200).json({ message: "Password reset link sent to your email" });
+  } catch (error) {
+    console.error("Error in forgot password: ", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+const handleResetPassword = async (req, res) => {
+  const { resetToken } = req.params;
+  const { newPassword } = req.body;
+
+  try {
+    const decoded = JWT.verify(resetToken, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    await sendWellcomeEmail(user.email,user.fullName)
+
+    return res.status(200).json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Error resetting password: ", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+module.exports = { handleUserSignup, handleUserSignin,handleUserlogout,handleUpdateUser,handleForgotPassword ,handleResetPassword};
