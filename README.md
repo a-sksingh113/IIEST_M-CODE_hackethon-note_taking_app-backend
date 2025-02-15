@@ -81,7 +81,7 @@ Or for development:
 npm run dev
 ```
 
-The server will be running on `http://localhost:5000` by default.
+The server will be running on `http://localhost:8080` by default.
 
 ## Scripts
 
